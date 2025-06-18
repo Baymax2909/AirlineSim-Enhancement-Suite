@@ -127,7 +127,13 @@ chrome.runtime.onInstalled.addListener(function() {
     });
 });
 
+// Listen for messages from content scripts or popup scripts
+// TODO: Implement message handling for other functionalities
 chrome.runtime.onMessage.addListener(
     (message, sender, sendResponse) => {
-        return saveFlightInfoToDatabase(message, sender, sendResponse);
+
+        if (message.content === 'FlightDetails') {
+            console.log('Flight details received');
+            return saveFlightInfoToDatabase(message, sender, sendResponse);
+        }
 });
