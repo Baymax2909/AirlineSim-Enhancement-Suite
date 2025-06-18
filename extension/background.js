@@ -3,6 +3,9 @@
 // found in the LICENSE file.
 
 'use strict';
+
+import { saveFlightInfoToDatabase} from "./modules/flightInfo/serviceworker_flightInfo.js";
+
 //Functions
 function setDefaultSettings() {
     //Add default settings
@@ -122,4 +125,9 @@ chrome.runtime.onInstalled.addListener(function() {
             actions: [new chrome.declarativeContent.ShowPageAction()]
     }]);
     });
+});
+
+chrome.runtime.onMessage.addListener(
+    (message, sender, sendResponse) => {
+        return saveFlightInfoToDatabase(message, sender, sendResponse);
 });

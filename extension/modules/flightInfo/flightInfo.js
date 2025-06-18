@@ -91,6 +91,7 @@ class FlightInfo {
         const notifications = new Notifications();
         try {
             await chrome.storage.local.set({ [key]: this.#data });
+            this.#sendDataToBackground();
             const result = await chrome.storage.local.get(['settings']);
             if (result?.settings?.flightInfo?.autoClose) {
                 window.close();
@@ -100,6 +101,17 @@ class FlightInfo {
             notifications.add("Flight information save failed.", {type: "error"});
             console.error(e);
         }
+    }
+
+    #sendDataToBackground() {
+        chrome.runtime.sendMessage(
+            {
+                content: 'FlightDetails'
+            },
+            function (response) {
+                console.log('Response from background:', response);
+            }
+        )
     }
 
     /**
