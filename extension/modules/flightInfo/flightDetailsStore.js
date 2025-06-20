@@ -6,7 +6,7 @@ export const FlightDetailsStore = {
 
     async save(serverName, flightId, flightData) {
         const db = await GameWorldDB.openDb(serverName, STORE_NAME);
-        const store = GameWorldDB.getObjectStore("flights", "readwrite");
+        const store = GameWorldDB.getObjectStore(STORE_NAME, "readwrite");
         return new Promise((resolve, reject) => {
             const req = store.put({ id: flightId, data: flightData, savedAt: new Date().toISOString() });
             req.onsuccess = () => resolve(true);
@@ -16,7 +16,7 @@ export const FlightDetailsStore = {
 
     async load(serverName, flightId) {
         const db = await GameWorldDB.openDb(serverName, STORE_NAME);
-        const store = GameWorldDB.getObjectStore("flights", "readonly");
+        const store = GameWorldDB.getObjectStore(STORE_NAME, "readonly");
         return new Promise((resolve, reject) => {
             const req = store.get(flightId);
             req.onsuccess = () => resolve(req.result);
@@ -26,7 +26,7 @@ export const FlightDetailsStore = {
 
     async delete(serverName, flightId) {
         const db = await GameWorldDB.openDb(serverName, STORE_NAME);
-        const store = GameWorldDB.getObjectStore("flights", "readwrite");
+        const store = GameWorldDB.getObjectStore(STORE_NAME, "readwrite");
         return new Promise((resolve, reject) => {
             const req = store.delete(flightId);
             req.onsuccess = () => resolve(true);
@@ -36,7 +36,7 @@ export const FlightDetailsStore = {
 
     async clear(serverName) {
         const db = await GameWorldDB.openDb(serverName, STORE_NAME);
-        const store = GameWorldDB.getObjectStore("flights", "readwrite");
+        const store = GameWorldDB.getObjectStore(STORE_NAME, "readwrite");
         return new Promise((resolve, reject) => {
             const req = store.clear();
             req.onsuccess = () => resolve(true);
@@ -46,7 +46,7 @@ export const FlightDetailsStore = {
 
     async listAll(serverName) {
         const db = await GameWorldDB.openDb(serverName, STORE_NAME);
-        const store = GameWorldDB.getObjectStore("flights", "readonly");
+        const store = GameWorldDB.getObjectStore(STORE_NAME, "readonly");
         return new Promise((resolve, reject) => {
             const req = store.getAll();
             req.onsuccess = () => resolve(req.result);
