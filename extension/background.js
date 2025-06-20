@@ -4,7 +4,7 @@
 
 'use strict';
 
-import { saveFlightInfoToDatabase} from "./modules/flightInfo/serviceworker_flightInfo.js";
+import { handleFlightInfoMessage } from "./modules/flightInfo/serviceworker_flightInfo.js";
 
 //Functions
 function setDefaultSettings() {
@@ -134,6 +134,9 @@ chrome.runtime.onMessage.addListener(
 
         if (message.content === 'FlightDetails') {
             console.log('Flight details received');
-            return saveFlightInfoToDatabase(message, sender, sendResponse);
+            handleFlightInfoMessage(message, sender)
+                .then(response => sendResponse(response))
+                .catch(error => sendResponse({ success: false, error: error.message }));
+            return true; // keep port open for async response
         }
-});
+    });
