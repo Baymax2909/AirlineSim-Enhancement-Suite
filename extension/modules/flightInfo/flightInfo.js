@@ -13,6 +13,7 @@ class FlightInfo {
         if (this.#isPrivateFlight() && this.#isCorrectTabOpen()) {
             this.#data = this.#collectFlightData();
             await this.#saveData();
+            this.#sendDataToBackground();
             this.#render();
         }
     }
@@ -41,16 +42,18 @@ class FlightInfo {
      */
     #collectFlightData() {
         const flightId = this.#getFlightId();
-        const dateTime = AES.getServerDate();
         const money = this.#getFinancials();
+        const serverDateTime = AES.getServerDate();
+        const flightLoad = this.#getFlightLoad();
 
         return {
             server: AES.getServerName(),
             flightId,
             type: 'flightInfo',
             money,
-            date: dateTime.date,
-            time: dateTime.time
+            date: serverDateTime.date,
+            time: serverDateTime.time,
+            flightLoad
         };
     }
 
@@ -82,6 +85,56 @@ class FlightInfo {
         return data;
     }
 
+
+    /**
+     * Extracts flight load data from the costing table
+     * @returns {{bookings: {}, feedersAndConnections: {}}}
+     */
+    #getFlightLoad() {
+        const rows = document.querySelectorAll('table.costing tbody tr');
+        const data = {
+            bookings: {},
+            feedersAndConnections: {}
+        };
+
+        const labelMap = {
+            'From ext. feeder': 'external_feeder',
+            'From own feeder': 'internal_feeder',
+            'To ext. connection': 'external_connection',
+            'To own connection': 'internal_connection'
+        };
+
+        const parseNumber = (value) => parseInt(value.replace(/[^\d]/g, ''), 10) || 0;
+
+        rows.forEach(row => {
+            const cells = row.querySelectorAll('td');
+            if (!cells.length) return;
+
+            const label = cells[0].textContent.trim();
+
+            // Extract Bookings
+            if (label === 'Bookings') {
+                data.bookings = {
+                    Y: parseNumber(cells[1].textContent),
+                    C: parseNumber(cells[2].textContent),
+                    F: parseNumber(cells[3].textContent),
+                    PAX: parseNumber(cells[4].textContent),
+                    Cargo: parseNumber(cells[5].textContent)
+                };
+            }
+
+            // Extract Feeders & Connections
+            if (labelMap[label]) {
+                data.feedersAndConnections[labelMap[label]] = {
+                    PAX: parseNumber(cells[2]?.textContent || ''),
+                    Cargo: parseNumber(cells[3]?.textContent || '')
+                };
+            }
+        });
+
+        return data;
+    }
+
     /**
      * Saves the flight data to local storage
      * @returns {Promise<void>}
@@ -91,7 +144,6 @@ class FlightInfo {
         const notifications = new Notifications();
         try {
             await chrome.storage.local.set({ [key]: this.#data });
-            this.#sendDataToBackground();
             const result = await chrome.storage.local.get(['settings']);
             if (result?.settings?.flightInfo?.autoClose) {
                 window.close();
@@ -104,14 +156,27 @@ class FlightInfo {
     }
 
     #sendDataToBackground() {
-        chrome.runtime.sendMessage(
-            {
-                content: 'FlightDetails'
-            },
-            function (response) {
-                console.log('Response from background:', response);
-            }
-        )
+        this.#sendMessage({
+            content: 'FlightDetails',
+            data: this.#data
+        })
+            .then(response => {
+                console.log("Save response:", response);
+            })
+            .catch(err => {
+                console.error("Failed to send message:", err.message);
+            });
+    }
+
+    #sendMessage(message) {
+        return new Promise((resolve, reject) => {
+            chrome.runtime.sendMessage(message, (response) => {
+                if (chrome.runtime.lastError) {
+                    return reject(new Error(chrome.runtime.lastError.message));
+                }
+                resolve(response);
+            });
+        });
     }
 
     /**
