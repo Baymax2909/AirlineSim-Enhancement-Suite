@@ -84,6 +84,12 @@
         {
             "js": ["content_fleetManagement.js"],
             "matches": ["https://*.airlinesim.aero/app/fleets*"]
+        },
+        {
+            "js": [
+                "modules/enterpriseSchedule/enterpriseEventOverview.js"
+            ],
+            "matches": ["https://*.airlinesim.aero/action/enterprise/schedule"]
         }
     ],
     "permissions": [

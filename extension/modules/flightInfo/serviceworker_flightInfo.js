@@ -27,10 +27,25 @@ export async function handleFlightInfoMessage(message, sender) {
                 console.error('Failed to save flight:', error);
                 return { success: false, error: error.message };
             }
+        case 'loadMultiple':
+            try {
+                const earliest = message.data.earliest;
+                const latest = message.data.latest;
+
+                const results = await FlightDetailsStore.loadMultipleByTimeBoundaries(
+                    serverName,
+                    airlineId,
+                    earliest,
+                    latest
+                );
+                console.log('Data was send as response!');
+                return { success: true, data: results };
+            } catch (error) {
+                console.error('Failed to load multiple flights:', error);
+                return { success: false, error: error.message };
+            }
         case 'delete':
         case 'loadSingle':
-        case 'loadMultiple':
-            break;
     }
 
 
