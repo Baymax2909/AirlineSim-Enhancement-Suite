@@ -49,6 +49,7 @@ class FlightInfo {
         return {
             server: AES.getServerName(),
             flightId,
+            airlineId: AES.getAirline().id,
             type: 'flightInfo',
             money,
             date: serverDateTime.date,
@@ -158,6 +159,7 @@ class FlightInfo {
     #sendDataToBackground() {
         this.#sendMessage({
             content: 'FlightDetails',
+            type: 'save',
             data: this.#data
         })
             .then(response => {

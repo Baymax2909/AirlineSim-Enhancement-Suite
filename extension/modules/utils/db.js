@@ -1,14 +1,24 @@
 export const GameWorldDB = (() => {
     let db = null;
 
-    async function openDb(serverName, storeName, version = 1) {
+    async function openDb(serverName, airlineId, storeName, version = 1) {
         if (db) return db;
         return new Promise((resolve, reject) => {
-            const request = indexedDB.open(`${serverName}`, version);
+            const request = indexedDB.open(`${serverName}` + `_airlineId_` + `${airlineId}`, version);
             request.onupgradeneeded = (evt) => {
                 db = evt.target.result;
                 if (!db.objectStoreNames.contains(storeName)) {
-                    db.createObjectStore(storeName, { keyPath: 'id' });
+                    const store = db.createObjectStore(storeName, { keyPath: 'flightId' });
+
+                    switch (storeName) {
+                        case 'flightDetails':
+                            store.createIndex('departureTime', 'departureTime', { unique: false });
+                            store.createIndex('arrivalTime', 'arrivalTime', { unique: false });
+                            store.createIndex('origin', 'origin', { unique: false });
+                            store.createIndex('destination', 'destination', { unique: false });
+                            store.createIndex('origin_destination', ['origin', 'destination'], { unique: false });
+                            break;
+                    }
                 }
             };
             request.onsuccess = (evt) => {

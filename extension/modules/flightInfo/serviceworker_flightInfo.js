@@ -12,24 +12,35 @@ export async function handleFlightInfoMessage(message, sender) {
         return { success: false, error: `Unexpected message content: ${message.content}` };
     }
 
-    const serverName = message.data.server;
-    const flightId = message.data.flightId;
-    const flightData = message.data;
-
-    try {
-        await FlightDetailsStore.save(serverName, flightId, flightData);
-        console.log(`Saved ${flightId} to ${serverName}FlightDatabase`);
-        return { success: true };
-    } catch (error) {
-        console.error('Failed to save flight:', error);
-        return { success: false, error: error.message };
+    switch (message.type) {
+        case 'save':
+            const serverName = message.data.server;
+            const flightId = message.data.flightId;
+            const flightData = message.data;
+            const airlineId = message.data.airlineId;
+            try {
+                await FlightDetailsStore.save(serverName, airlineId, flightId, flightData);
+                console.log(`Saved ${flightId} to ${serverName}FlightDatabase`);
+                return { success: true };
+            } catch (error) {
+                console.error('Failed to save flight:', error);
+                return { success: false, error: error.message };
+            }
+        case 'delete':
+        case 'loadSingle':
+        case 'loadMultiple':
+            break;
     }
+
+
+
 }
 
 // In message.data, we expect flight information to be present.
 /**
  * {
  *     server: "Bleriot",
+ *     airlineId: 822,
  *     flightId: "314826",
  *     type: "flightInfo",
  *     money: {
