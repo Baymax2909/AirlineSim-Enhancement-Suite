@@ -1,14 +1,17 @@
 class AircraftFlight {
     #serverName
     #airlineId
+    #routeData
 
     constructor() {
         this.#serverName = AES.getServerName();
         this.#airlineId = AES.getAirline().id;
+        this.#routeData = [];
     }
 
     init() {
         this.#collectRouteData();
+        this.#sendDataToBackground()
     }
 
     /**
@@ -36,7 +39,7 @@ class AircraftFlight {
                 : null;
 
             if (flightId && depCode && arrCode && depTime && arrTime) {
-                this.#sendDataToBackground({
+                this.#routeData.push({
                     server: this.#serverName,
                     airlineId: this.#airlineId,
                     flightId: flightId,
@@ -44,8 +47,7 @@ class AircraftFlight {
                     origin: depCode,
                     departureTime: depTime,
                     destination: arrCode,
-                    arrivalTime: arrTime
-                })
+                    arrivalTime: arrTime})
             }
         });
     }
@@ -62,18 +64,20 @@ class AircraftFlight {
         return parseInt(`${month}${day}${hour}${minute}`, 10);
     }
 
-    #sendDataToBackground(data) {
-        this.#sendMessage({
-            content: 'FlightDetails',
-            type: 'save',
-            data: data
-        })
-            .then(response => {
-                console.log("Save response:", response);
+    #sendDataToBackground() {
+        this.#routeData.forEach( flight => {
+            this.#sendMessage({
+                content: 'FlightDetails',
+                type: 'save',
+                data: flight
             })
-            .catch(err => {
-                console.error("Failed to send message:", err.message);
-            });
+                .then(response => {
+                    console.log("Save response:", response);
+                })
+                .catch(err => {
+                    console.error("Failed to send message:", err.message);
+                });
+        });
     }
 
     #sendMessage(message) {
