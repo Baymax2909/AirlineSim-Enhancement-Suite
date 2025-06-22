@@ -75,7 +75,10 @@
             "matches": ["https://*.airlinesim.aero/action/info/flight*"]
         },
         {
-            "js": ["content_aircraftFlights.js"],
+            "js": [
+                "content_aircraftFlights.js",
+                "modules/aircraftFlights/aircraftFlights.js"
+            ],
             "matches": ["https://*.airlinesim.aero/app/fleets/aircraft/*/1*"]
         },
         {

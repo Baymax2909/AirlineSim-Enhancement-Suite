@@ -7,19 +7,19 @@ export const FlightDetailsStore = {
     async save(serverName, airlineId, flightId, flightData) {
         const db = await GameWorldDB.openDb(serverName, airlineId, STORE_NAME);
         const store = GameWorldDB.getObjectStore(STORE_NAME, "readwrite");
+
         return new Promise((resolve, reject) => {
-            const req = store.put(
-                {
-                    flightId: flightId,
-                    departureTime: null,
-                    arrivalTime: null,
-                    origin: null,
-                    destination: null,
-                    data: flightData,
-                    savedAt: new Date().toISOString()
-                });
-            req.onsuccess = () => resolve(true);
-            req.onerror = () => reject(req.error);
+
+            const getReq = store.get(flightId);
+            getReq.onsuccess = () => {
+                const existing = getReq.result || { flightId }; // Ensure the key exists
+                const merged = { ...existing, ...flightData };
+
+                const putReq = store.put(merged);
+                putReq.onsuccess = () => resolve(merged);
+                putReq.onerror = () => reject(putReq.error);
+            };
+            getReq.onerror = () => reject(getReq.error);
         });
     },
 

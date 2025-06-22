@@ -12,14 +12,15 @@ export async function handleFlightInfoMessage(message, sender) {
         return { success: false, error: `Unexpected message content: ${message.content}` };
     }
 
+    const serverName = message.data.server;
+    const flightId = message.data.flightId;
+    const airlineId = message.data.airlineId;
+
+    // No need for brakes because there is always a return
     switch (message.type) {
         case 'save':
-            const serverName = message.data.server;
-            const flightId = message.data.flightId;
-            const flightData = message.data;
-            const airlineId = message.data.airlineId;
             try {
-                await FlightDetailsStore.save(serverName, airlineId, flightId, flightData);
+                await FlightDetailsStore.save(serverName, airlineId, flightId, message.data);
                 console.log(`Saved ${flightId} to ${serverName}FlightDatabase`);
                 return { success: true };
             } catch (error) {

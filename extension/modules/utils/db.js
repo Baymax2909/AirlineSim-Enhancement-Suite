@@ -12,6 +12,7 @@ export const GameWorldDB = (() => {
 
                     switch (storeName) {
                         case 'flightDetails':
+                            store.createIndex('flightNumber', 'flightNumber', { unique: false });
                             store.createIndex('departureTime', 'departureTime', { unique: false });
                             store.createIndex('arrivalTime', 'arrivalTime', { unique: false });
                             store.createIndex('origin', 'origin', { unique: false });
