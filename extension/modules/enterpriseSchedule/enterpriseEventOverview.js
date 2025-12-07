@@ -90,6 +90,7 @@ class EnterpriseEventOverview {
         const table = document.querySelector('div div div table.table');
         if (!table || !this.#flights || !this.#flights.length) return;
 
+        this.#normalizeExistingTableStructure(table)
         this.#renderFlightsToFinancialsTable(table)
         this.#updateRunningBalance(table)
     }
@@ -119,37 +120,44 @@ class EnterpriseEventOverview {
         Object.entries(flightsByLabel).forEach(([label, flights]) => {
             const tbody = this.#getOrCreateTbodyForDateLabel(table, label);
 
-            // Exclude the row with the <th> (first row)
-            const otherRows = Array.from(tbody.querySelectorAll('tr')).slice(1);
+            // Exclude header rows (rows that contain a <th>)
+            const otherRows = Array.from(tbody.querySelectorAll('tr'))
+                .filter(tr => !tr.querySelector('th'));
 
-            // Create and collect new rows
+            // Create and collect new rows (as before)
             const newRows = [];
-            flights.sort((a, b) => parseInt(a.departureTime) - parseInt(b.departureTime))
+            flights.sort((a, b) => this.#parseTimeFromFlightTime(a.departureTime) - this.#parseTimeFromFlightTime(b.departureTime))
                 .forEach(flight => {
                     newRows.push(this.#createFlightRow('departure', flight));
                 });
 
-            // Insert rows in correct order based on time
+            // Insertion: compare numeric minute values
             newRows.forEach(row => {
-                const rowTime = row.firstChild?.textContent.trim();
+                const rowMinutes = Number(row.dataset.flightTime);
+
                 const insertionIndex = otherRows.findIndex(existing => {
-                    const existingTime = existing.children[0]?.textContent.trim();
-                    return existingTime && rowTime < existingTime;
+                    // existing may come from original HTML (no dataset), so compute minutes robustly
+                    const existingMinutes = Number(existing.dataset.flightTime)
+                        || this.#parseHHMMToMinutes(existing.querySelector('td')?.textContent || '');
+                    return !isNaN(existingMinutes) && rowMinutes < existingMinutes;
                 });
+
                 if (insertionIndex === -1) {
                     tbody.appendChild(row);
+                    otherRows.push(row);
                 } else {
                     tbody.insertBefore(row, otherRows[insertionIndex]);
                     otherRows.splice(insertionIndex, 0, row);
                 }
             });
 
-            // Update rowspan of <th>
-            const allRows = tbody.querySelectorAll('tr');
-            const th = allRows[0]?.querySelector('th');
-            if (th) {
-                th.setAttribute('rowspan', allRows.length);
+            const dataRows = Array.from(tbody.querySelectorAll('tr')).filter(tr => !tr.querySelector('th'));
+            const headerTh = tbody.querySelector('tr > th');
+            if (headerTh) {
+                // 1 header row + number of data rows
+                headerTh.setAttribute('rowspan', String(1 + dataRows.length));
             }
+
         });
     }
 
@@ -161,48 +169,52 @@ class EnterpriseEventOverview {
         const table = document.querySelector('div div div table.table');
         if (!table) return;
 
-        const existingLabels = Array.from(table.querySelectorAll('tbody > tr > th'))
-            .map(th => th.textContent.trim());
+        // set dataset.flightTime for existing data rows (format 'HH:MM' in first td)
+        Array.from(table.querySelectorAll('tbody tr'))
+            .forEach(tr => {
+                if (tr.querySelector('th')) return; // skip header rows
+                const firstTd = tr.querySelector('td');
+                if (!firstTd) return;
+                const minutes = this.#parseHHMMToMinutes(firstTd.textContent || '');
+                if (!isNaN(minutes)) tr.dataset.flightTime = String(minutes);
+            });
+
+
+        const existingLabels = new Set(
+            Array.from(table.querySelectorAll('tbody > tr > th'))
+                .map(th => th.textContent.trim())
+        );
 
         const now = new Date();
-        const end = new Date(now.getTime() + 72 * 60 * 60 * 1000); // now + 72 hours
-
-        const dateSet = new Set();
+        const end = new Date(now.getTime() + 72 * 60 * 60 * 1000);
 
         for (let d = new Date(now); d <= end; d.setUTCDate(d.getUTCDate() + 1)) {
             const MM = String(d.getUTCMonth() + 1).padStart(2, '0');
             const DD = String(d.getUTCDate()).padStart(2, '0');
+
             const label = this.#getDateLabelFromFlight(parseInt(`${MM}${DD}0000`, 10));
 
-            if (!existingLabels.includes(label)) {
+            // Erstellen, falls nicht vorhanden
+            if (!existingLabels.has(label)) {
                 const tbody = document.createElement('tbody');
+
                 const row = document.createElement('tr');
                 const th = document.createElement('th');
                 th.setAttribute('rowspan', '1');
                 th.textContent = label;
+
                 row.appendChild(th);
                 tbody.appendChild(row);
+                table.appendChild(tbody);
 
-                // Insert in correct date order
-                const insertionPoint = Array.from(table.querySelectorAll('tbody')).find(otherTbody => {
-                    const th = otherTbody.querySelector('th');
-                    const otherLabel = th?.textContent.trim();
-                    if (!otherLabel) return false;
-
-                    const otherDate = this.#parseDateLabelToDate(otherLabel);
-                    return d < otherDate;
-                });
-
-                if (insertionPoint) {
-                    table.insertBefore(tbody, insertionPoint);
-                } else {
-                    table.appendChild(tbody);
-                }
-
-                existingLabels.push(label);
+                existingLabels.add(label);
             }
         }
+
+        // FIX 3 – Garantiert korrekte Reihenfolge nach Erstellung aller Tage
+        this.#sortTableBodiesByDate(table);
     }
+
 
     /**
      * Gets or creates a <tbody> section for the given date label
@@ -211,49 +223,60 @@ class EnterpriseEventOverview {
      * @returns {HTMLTableSectionElement}
      */
     #getOrCreateTbodyForDateLabel(table, label) {
+        // Suche tbody, ggf. mit gemischter ersten Zeile (th + tds)
         const existingTbody = Array.from(table.querySelectorAll('tbody')).find(tbody => {
-            const rowWithTh = Array.from(tbody.querySelectorAll('tr')).find(tr => {
+            const rowWithTh = Array.from(tbody.querySelectorAll('tr')).find(tr => tr.querySelector('th'));
+            if (!rowWithTh) return false;
+            const th = rowWithTh.querySelector('th');
+            return th && th.textContent.trim() === label;
+        });
+
+        if (existingTbody) {
+            // Falls die erste (oder eine) Zeile das <th> kombiniert mit <td> enthält,
+            // splitte sie in: headerRow (nur th) + contentRow (nur tds).
+            const mixedRow = Array.from(existingTbody.querySelectorAll('tr')).find(tr => {
                 const th = tr.querySelector('th');
-                return th && th.textContent.trim() === label;
+                const tds = tr.querySelectorAll('td');
+                return th && tds.length > 0;
             });
 
-            if (rowWithTh) {
-                const th = rowWithTh.querySelector('th');
+            if (mixedRow) {
+                const th = mixedRow.querySelector('th');
+                const contentRow = mixedRow.cloneNode(true);
+
+                // Remove th from content row
+                const thInContent = contentRow.querySelector('th');
+                if (thInContent) thInContent.remove();
+
+                // Create pure header row
                 const headerRow = document.createElement('tr');
                 headerRow.appendChild(th.cloneNode(true));
 
-                const contentRow = rowWithTh.cloneNode(true);
-                const thInContentRow = contentRow.querySelector('th');
-                if (thInContentRow) thInContentRow.remove();
-
-                // Insert both rows at the beginning of tbody
-                tbody.insertBefore(contentRow, tbody.firstChild);
-                tbody.insertBefore(headerRow, tbody.firstChild);
-
-                // Remove the original mixed row
-                rowWithTh.remove();
-
-                return true; // this tbody is the one we're looking for
+                // Replace mixedRow with headerRow + contentRow at the same position
+                existingTbody.insertBefore(headerRow, mixedRow);
+                existingTbody.insertBefore(contentRow, headerRow.nextSibling);
+                mixedRow.remove();
             }
 
-            return false;
-        });
+            return existingTbody;
+        }
 
-
-        if (existingTbody) return existingTbody;
-
-        // Create new tbody and initial row with <th>
+        // Nicht vorhanden → neu erstellen
         const newTbody = document.createElement('tbody');
         const row = document.createElement('tr');
         const th = document.createElement('th');
-        th.setAttribute('rowspan', '1'); // placeholder, will adjust later
+        th.setAttribute('rowspan', '1');
         th.textContent = label;
         row.appendChild(th);
         newTbody.appendChild(row);
         table.appendChild(newTbody);
 
+        // Optional: sofort sortieren, damit Reihenfolge stabil bleibt
+        this.#sortTableBodiesByDate(table);
+
         return newTbody;
     }
+
 
 
     /**
@@ -268,7 +291,7 @@ class EnterpriseEventOverview {
         // Flight time from departureTime or arrivalTime
         const flightTimeNum = type === 'departure' ? flight.departureTime : flight.arrivalTime;
         const minutes = this.#parseTimeFromFlightTime(flightTimeNum);
-        row.dataset.flightTime = minutes;  // store for sorting
+        row.dataset.flightTime = String(minutes);  // store for sorting
 
         // Time cell
         const timeStr = this.#formatTime(flightTimeNum);
@@ -392,11 +415,107 @@ class EnterpriseEventOverview {
         return hh * 60 + mm;
     }
 
+    // FIX 1 – Robustes Parsen des Labels "Monday, 08.12."
     #parseDateLabelToDate(label) {
-        const [, ddmm] = label.split(', ');
-        const [DD, MM] = ddmm.replace('.', '').split('.').map(Number);
+        const m = label.match(/\b(\d{2})\.(\d{2})\./);
+        if (!m) return null;
+
+        const day = Number(m[1]);
+        const month = Number(m[2]);
+
         const now = new Date();
-        return new Date(Date.UTC(now.getUTCFullYear(), MM - 1, DD));
+        const currentYear = now.getUTCFullYear();
+
+        // Basisjahr: heutiges Jahr
+        let year = currentYear;
+
+        // Das Datum wird zunächst mit aktuellem Jahr erzeugt
+        let date = new Date(Date.UTC(year, month - 1, day));
+
+        // Falls das Datum älter ist als "heute - 1 Tag":
+        // → dann ist es ein Datum aus dem *nächsten* Jahr
+        const cutoff = new Date(Date.UTC(
+            currentYear,
+            now.getUTCMonth(),
+            now.getUTCDate() - 1
+        ));
+
+        if (date < cutoff) {
+            year += 1;
+            date = new Date(Date.UTC(year, month - 1, day));
+        }
+
+        return date;
+    }
+
+// FIX 2 – Garantiert korrekte Sortierung der Tbody-Blöcke
+    #sortTableBodiesByDate(table) {
+        const bodies = Array.from(table.querySelectorAll('tbody'));
+
+        bodies
+            .sort((a, b) => {
+                const labelA = a.querySelector('th')?.textContent.trim();
+                const labelB = b.querySelector('th')?.textContent.trim();
+
+                const dateA = this.#parseDateLabelToDate(labelA);
+                const dateB = this.#parseDateLabelToDate(labelB);
+
+                return dateA - dateB;
+            })
+            .forEach(body => table.appendChild(body)); // DOM reorder
+    }
+
+    #parseHHMMToMinutes(hhmm) {
+        if (!hhmm) return NaN;
+        const m = hhmm.trim().match(/^(\d{1,2}):(\d{2})$/);
+        if (!m) return NaN;
+        return parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
+    }
+    #normalizeExistingTableStructure(table) {
+        const tbodies = Array.from(table.querySelectorAll('tbody'));
+
+        tbodies.forEach(tbody => {
+            const rows = Array.from(tbody.querySelectorAll('tr'));
+
+            rows.forEach(row => {
+                const th = row.querySelector('th');
+                const tds = row.querySelectorAll('td');
+
+                // We are only interested in mixed rows: <th> + <td>*
+                if (!th || tds.length === 0) return;
+
+                // Clone the <th> into a new header row:
+                const headerRow = document.createElement('tr');
+                headerRow.appendChild(th.cloneNode(true));
+
+                // Clone the original row into a new pure data row
+                const dataRow = row.cloneNode(true);
+                const thInsideData = dataRow.querySelector('th');
+                if (thInsideData) thInsideData.remove();
+
+                // Insert the two new rows above the original mixed row
+                tbody.insertBefore(headerRow, row);
+                tbody.insertBefore(dataRow, headerRow.nextSibling);
+
+                // Remove the old faulty row
+                row.remove();
+            });
+        });
+
+        // After splitting, recalc all rowspans
+        this.#recalculateAllRowspans(table);
+    }
+
+    #recalculateAllRowspans(table) {
+        const tbodies = Array.from(table.querySelectorAll('tbody'));
+
+        tbodies.forEach(tbody => {
+            const headerTh = tbody.querySelector('tr > th');
+            if (!headerTh) return;
+
+            const dataRows = Array.from(tbody.querySelectorAll('tr')).filter(r => !r.querySelector('th'));
+            headerTh.setAttribute('rowspan', String(1 + dataRows.length));
+        });
     }
 
     /**
@@ -412,11 +531,11 @@ class EnterpriseEventOverview {
         let balance = this.#extractStartingBalance();
 
         tbodies.forEach(tbody => {
-            const rows = tbody.querySelectorAll('tr');
+            const dataRows = Array.from(tbody.querySelectorAll('tr')).filter(tr => !tr.querySelector('th'));
 
-            rows.forEach(row => {
+            dataRows.forEach(row => {
                 const cells = row.querySelectorAll('td');
-                if (cells.length < 5) return; // skip headers or malformed rows
+                if (cells.length < 5) return;
 
                 const creditTd = cells[2];
                 const debitTd = cells[3];
@@ -427,7 +546,6 @@ class EnterpriseEventOverview {
 
                 balance += credit - debit;
 
-                // Clear and insert balance
                 balanceTd.innerHTML = '';
                 const span = document.createElement('span');
                 span.textContent = this.#formatMoney(balance);
@@ -436,6 +554,7 @@ class EnterpriseEventOverview {
                 balanceTd.append(' AS$');
             });
         });
+
     }
 
     #extractAmount(td) {
